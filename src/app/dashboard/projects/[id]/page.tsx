@@ -56,6 +56,12 @@ export default async function ProjectPage({
         >
           Timeline
         </Link>
+        <Link
+          href={`/dashboard/projects/${projectId}/report`}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors pb-2"
+        >
+          Report
+        </Link>
       </div>
 
       <div>
