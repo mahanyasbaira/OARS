@@ -5,8 +5,12 @@ import { createUpload } from '@/server/db/sources'
 import { getProjectById } from '@/server/db/projects'
 import { getUserIdByClerkId } from '@/server/db/users'
 import { runExtractionPipeline } from '@/workers/extract-text'
+import { runMultimodalPipeline } from '@/workers/extract-multimodal'
 
-const TEXT_MIME_TYPES = ['application/pdf', 'text/plain', 'text/markdown']
+const TEXT_MIME_TYPES   = ['application/pdf', 'text/plain', 'text/markdown']
+const AUDIO_MIME_TYPES  = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg']
+const VIDEO_MIME_TYPES  = ['video/mp4', 'video/webm', 'video/quicktime']
+const IMAGE_MIME_TYPES  = ['image/jpeg', 'image/png', 'image/webp']
 
 export async function POST(request: Request) {
   const { userId: clerkId } = await auth()
@@ -29,10 +33,18 @@ export async function POST(request: Request) {
 
   const upload = await createUpload(sourceId, r2Key, originalFilename, mimeType, fileSize)
 
-  // Auto-trigger text extraction for supported text modalities
+  // Auto-trigger the appropriate extraction pipeline
   if (TEXT_MIME_TYPES.includes(mimeType)) {
     runExtractionPipeline(sourceId, projectId, r2Key, mimeType).catch((err) => {
-      console.error('[confirm] Auto-extraction failed:', err)
+      console.error('[confirm] Text extraction failed:', err)
+    })
+  } else if (
+    AUDIO_MIME_TYPES.includes(mimeType) ||
+    VIDEO_MIME_TYPES.includes(mimeType) ||
+    IMAGE_MIME_TYPES.includes(mimeType)
+  ) {
+    runMultimodalPipeline(sourceId, projectId, r2Key, mimeType).catch((err) => {
+      console.error('[confirm] Multimodal extraction failed:', err)
     })
   }
 
