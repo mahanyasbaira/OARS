@@ -59,7 +59,7 @@ export default async function ProjectPage({
             </p>
           </div>
         ) : (
-          <SourceList sources={sources} />
+          <SourceList sources={sources} projectId={project.id} />
         )}
       </div>
     </div>

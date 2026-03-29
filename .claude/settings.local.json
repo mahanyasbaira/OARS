@@ -16,7 +16,10 @@
       "Bash(rm -rf node_modules)",
       "Bash(npm install:*)",
       "Bash(npm run:*)",
-      "Bash(npx shadcn@latest init --defaults)"
+      "Bash(npx shadcn@latest init --defaults)",
+      "Bash(npx shadcn@latest add card input label badge separator dropdown-menu avatar --yes)",
+      "Bash(export PATH=\"$PATH:/opt/homebrew/bin\")",
+      "Bash(gh issue:*)"
     ]
   }
 }

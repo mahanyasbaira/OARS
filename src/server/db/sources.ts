@@ -62,7 +62,7 @@ export async function createUpload(
       r2_key: r2Key,
       original_filename: originalFilename,
       mime_type: mimeType,
-      file_size: fileSize,
+      file_size: Math.round(fileSize),
     })
     .select('id')
     .single()

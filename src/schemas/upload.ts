@@ -14,7 +14,7 @@ export const confirmUploadSchema = z.object({
   r2Key: z.string().min(1),
   originalFilename: z.string().min(1),
   mimeType: z.string().min(1),
-  fileSize: z.number().int().positive(),
+  fileSize: z.number().positive(),
 })
 
 export type RequestUploadUrlInput = z.infer<typeof requestUploadUrlSchema>

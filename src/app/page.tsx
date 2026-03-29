@@ -1,8 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 
 export default async function LandingPage() {
   const { userId } = await auth()
@@ -18,10 +16,16 @@ export default async function LandingPage() {
           align them on a shared timeline, and generate source-grounded research reports.
         </p>
         <div className="flex gap-3 justify-center">
-          <Link href="/sign-up" className={cn(buttonVariants({ variant: 'default' }))}>
+          <Link
+            href="/sign-up"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+          >
             Get started
           </Link>
-          <Link href="/sign-in" className={cn(buttonVariants({ variant: 'outline' }))}>
+          <Link
+            href="/sign-in"
+            className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+          >
             Sign in
           </Link>
         </div>

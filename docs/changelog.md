@@ -5,6 +5,21 @@ Format: `[date] — description`
 
 ---
 
+## [2026-03-28] — Milestone 2: Text Extraction Pipeline
+
+### Added
+- `db/migrations/002_extractions.sql` — `extractions` and `agent_runs` tables with RLS
+- `src/schemas/extraction.ts` — shared `ExtractionPayloadSchema` (Zod) used by all agents
+- `src/agents/text-agent.ts` — Text Agent using Gemini 1.5 Flash (free tier, prompt v1)
+- `src/workers/extract-text.ts` — extraction pipeline: fetch from R2 → parse PDF → run agent → save → update status
+- `src/server/db/extractions.ts` — DB helpers for saving and fetching extractions
+- `src/server/db/jobs.ts` — job lifecycle helpers (create, update status, increment attempts)
+- `POST /api/extract` — manual trigger endpoint for extraction
+- `GET /api/projects/[id]/sources/[sourceId]` — status + extraction summary for polling
+- Auto-trigger extraction on upload confirm for text MIME types
+- Source status badge polls every 3s while pending/processing, shows confidence % when ready
+- `next.config.ts` — `serverExternalPackages: ['pdf-parse']` for CJS compatibility
+
 ## [2026-03-28] — Milestone 1: Auth + Projects + File Upload
 
 ### Added
