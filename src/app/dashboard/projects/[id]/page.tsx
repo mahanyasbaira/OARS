@@ -43,6 +43,21 @@ export default async function ProjectPage({
         <UploadDialog projectId={project.id} />
       </div>
 
+      <div className="flex gap-4 border-b pb-2">
+        <Link
+          href={`/dashboard/projects/${projectId}`}
+          className="text-sm font-medium border-b-2 border-foreground pb-2 -mb-[9px]"
+        >
+          Sources
+        </Link>
+        <Link
+          href={`/dashboard/projects/${projectId}/timeline`}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors pb-2"
+        >
+          Timeline
+        </Link>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Sources</h2>

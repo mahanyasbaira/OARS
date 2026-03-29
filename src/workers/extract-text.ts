@@ -1,6 +1,7 @@
 import { runTextAgent } from '@/agents/text-agent'
 import { saveExtraction } from '@/server/db/extractions'
 import { createJob, updateJobStatus, updateSourceStatus, incrementJobAttempts } from '@/server/db/jobs'
+import { runTimelineAggregation } from '@/workers/aggregate-timeline'
 
 /**
  * Fetches a file from R2 and returns its buffer.
@@ -45,6 +46,11 @@ export async function runExtractionPipeline(
     // Step 4: mark done
     await updateSourceStatus(sourceId, 'ready')
     await updateJobStatus(job.id, 'completed')
+
+    // Step 5: re-aggregate timeline for the project (fire-and-forget, non-blocking)
+    runTimelineAggregation(projectId).catch((err) => {
+      console.error(`[extract-text] Timeline aggregation failed for project ${projectId}:`, err)
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error(`[extract-text] Job ${job.id} failed: ${message}`)
