@@ -4,6 +4,9 @@ import { confirmUploadSchema } from '@/schemas/upload'
 import { createUpload } from '@/server/db/sources'
 import { getProjectById } from '@/server/db/projects'
 import { getUserIdByClerkId } from '@/server/db/users'
+import { runExtractionPipeline } from '@/workers/extract-text'
+
+const TEXT_MIME_TYPES = ['application/pdf', 'text/plain', 'text/markdown']
 
 export async function POST(request: Request) {
   const { userId: clerkId } = await auth()
@@ -25,6 +28,13 @@ export async function POST(request: Request) {
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
   const upload = await createUpload(sourceId, r2Key, originalFilename, mimeType, fileSize)
+
+  // Auto-trigger text extraction for supported text modalities
+  if (TEXT_MIME_TYPES.includes(mimeType)) {
+    runExtractionPipeline(sourceId, projectId, r2Key, mimeType).catch((err) => {
+      console.error('[confirm] Auto-extraction failed:', err)
+    })
+  }
 
   return NextResponse.json({ uploadId: upload.id }, { status: 201 })
 }

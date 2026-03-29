@@ -1,5 +1,7 @@
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import type { SourceModality, SourceStatus } from '@/lib/supabase/types'
 
 type Source = {
@@ -23,10 +25,10 @@ const MODALITY_LABELS: Record<SourceModality, string> = {
 }
 
 const STATUS_VARIANT: Record<SourceStatus, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-  pending: 'outline',
+  pending:    'outline',
   processing: 'secondary',
-  ready: 'default',
-  failed: 'destructive',
+  ready:      'default',
+  failed:     'destructive',
 }
 
 function formatBytes(bytes: number | null): string {
@@ -36,31 +38,78 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function SourceList({ sources }: { sources: Source[] }) {
+function SourceRow({
+  source,
+  projectId,
+}: {
+  source: Source
+  projectId: string
+}) {
+  const [status, setStatus] = useState<SourceStatus>(source.status)
+  const [confidence, setConfidence] = useState<number | null>(null)
+
+  // Poll status every 3s while processing
+  const poll = useCallback(async () => {
+    const res = await fetch(`/api/projects/${projectId}/sources/${source.id}`)
+    if (!res.ok) return
+    const data = await res.json() as {
+      source: { status: SourceStatus }
+      extraction: { confidence: number } | null
+    }
+    setStatus(data.source.status)
+    if (data.extraction) setConfidence(data.extraction.confidence)
+  }, [projectId, source.id])
+
+  useEffect(() => {
+    if (status !== 'processing' && status !== 'pending') return
+    const interval = setInterval(poll, 3000)
+    return () => clearInterval(interval)
+  }, [status, poll])
+
+  const upload = source.uploads?.[0]
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium truncate">{source.name}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {upload ? formatBytes(upload.file_size) : '—'}
+          {' · '}
+          {new Date(source.created_at).toLocaleDateString()}
+          {confidence !== null && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              · confidence {Math.round(confidence * 100)}%
+            </span>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Badge variant="outline" className="text-xs">
+          {MODALITY_LABELS[source.modality]}
+        </Badge>
+        <Badge variant={STATUS_VARIANT[status]} className="text-xs capitalize">
+          {status === 'processing' && (
+            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+          )}
+          {status}
+        </Badge>
+      </div>
+    </div>
+  )
+}
+
+export function SourceList({
+  sources,
+  projectId,
+}: {
+  sources: Source[]
+  projectId: string
+}) {
   return (
     <div className="rounded-lg border divide-y">
-      {sources.map((source) => {
-        const upload = source.uploads?.[0]
-        return (
-          <div key={source.id} className="flex items-center justify-between px-4 py-3 gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{source.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {upload ? formatBytes(upload.file_size) : '—'} ·{' '}
-                {new Date(source.created_at).toLocaleDateString()}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge variant="outline" className="text-xs">
-                {MODALITY_LABELS[source.modality]}
-              </Badge>
-              <Badge variant={STATUS_VARIANT[source.status]} className="text-xs capitalize">
-                {source.status}
-              </Badge>
-            </div>
-          </div>
-        )
-      })}
+      {sources.map((source) => (
+        <SourceRow key={source.id} source={source} projectId={projectId} />
+      ))}
     </div>
   )
 }
