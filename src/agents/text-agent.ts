@@ -3,7 +3,7 @@ import { ExtractionPayloadSchema, type ExtractionPayload } from '@/schemas/extra
 
 // Prompt version — increment when prompt behaviour changes and document in changelog
 const PROMPT_VERSION = 'text-agent-v1'
-const MODEL = 'gemini-1.5-flash'
+const MODEL = 'gemini-2.0-flash'
 
 const SYSTEM_PROMPT = `You are a precise research extraction agent. Your task is to extract structured information from the provided document text.
 
