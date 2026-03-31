@@ -40,6 +40,18 @@ export async function getProjectById(projectId: string, userId: string): Promise
   return data as ProjectRow
 }
 
+/** Server-side lookup by ID only — for use in workers where userId is unavailable. */
+export async function getProjectNameById(projectId: string): Promise<string | null> {
+  const { data, error } = await adminClient()
+    .from('projects')
+    .select('name')
+    .eq('id', projectId)
+    .single()
+
+  if (error || !data) return null
+  return (data as { name: string }).name
+}
+
 export async function createProject(userId: string, input: CreateProjectInput): Promise<ProjectRow> {
   const { data, error } = await adminClient()
     .from('projects')

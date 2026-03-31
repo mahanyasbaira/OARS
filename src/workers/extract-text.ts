@@ -1,7 +1,11 @@
 import { runTextAgent } from '@/agents/text-agent'
-import { saveExtraction } from '@/server/db/extractions'
+import { saveExtraction, hasExtractionForSource } from '@/server/db/extractions'
 import { createJob, updateJobStatus, updateSourceStatus, incrementJobAttempts } from '@/server/db/jobs'
+import { getProjectOwnerEmail } from '@/server/db/users'
+import { getProjectNameById } from '@/server/db/projects'
 import { runTimelineAggregation } from '@/workers/aggregate-timeline'
+import { withRetry } from '@/lib/retry'
+import { sendExtractionCompleteEmail } from '@/lib/email'
 
 /**
  * Fetches a file from R2 and returns its buffer.
@@ -15,10 +19,10 @@ async function fetchFileFromR2(r2Key: string): Promise<Buffer> {
 }
 
 /**
- * Main extraction pipeline for a single source.
+ * Main extraction pipeline for a single text/PDF source.
  * Sends the file buffer directly to Gemini — no intermediate text parsing step.
- * Called from the API route handler — runs inline for now (Milestone 2).
- * In Milestone 5 this moves to a persistent Railway worker with retry logic.
+ * Retries up to 3 times with exponential backoff on agent failure.
+ * Skips if extraction already exists for this source (deduplication guard).
  */
 export async function runExtractionPipeline(
   sourceId: string,
@@ -26,7 +30,12 @@ export async function runExtractionPipeline(
   r2Key: string,
   mimeType: string
 ): Promise<void> {
-  // Create job record
+  // Deduplication guard — skip if already processed
+  if (await hasExtractionForSource(sourceId)) {
+    console.log(`[extract-text] Source ${sourceId} already has extraction, skipping`)
+    return
+  }
+
   const job = await createJob(projectId, sourceId, 'text-extraction')
 
   await updateSourceStatus(sourceId, 'processing')
@@ -34,23 +43,27 @@ export async function runExtractionPipeline(
   await incrementJobAttempts(job.id)
 
   try {
-    // Step 1: fetch file from R2
     const buffer = await fetchFileFromR2(r2Key)
 
-    // Step 2: run Text Agent — Gemini reads the file directly as base64
-    const extraction = await runTextAgent(sourceId, projectId, buffer, mimeType)
+    const extraction = await withRetry(
+      () => runTextAgent(sourceId, projectId, buffer, mimeType),
+      { label: `text-agent:${sourceId}` }
+    )
 
-    // Step 3: save extraction to DB
     await saveExtraction(extraction)
-
-    // Step 4: mark done
     await updateSourceStatus(sourceId, 'ready')
     await updateJobStatus(job.id, 'completed')
 
-    // Step 5: re-aggregate timeline for the project (fire-and-forget, non-blocking)
     runTimelineAggregation(projectId).catch((err) => {
       console.error(`[extract-text] Timeline aggregation failed for project ${projectId}:`, err)
     })
+
+    // Fire-and-forget email notification
+    Promise.all([getProjectOwnerEmail(projectId), getProjectNameById(projectId)])
+      .then(([email, name]) => {
+        if (email && name) sendExtractionCompleteEmail(email, name, projectId)
+      })
+      .catch(() => { /* non-critical */ })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error(`[extract-text] Job ${job.id} failed: ${message}`)

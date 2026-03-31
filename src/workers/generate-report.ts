@@ -2,6 +2,9 @@ import { getExtractionsByProjectId } from '@/server/db/extractions'
 import { getTimeline } from '@/server/db/timeline'
 import { saveReport } from '@/server/db/reports'
 import { runReportAgent } from '@/agents/report-agent'
+import { getProjectOwnerEmail } from '@/server/db/users'
+import { getProjectNameById } from '@/server/db/projects'
+import { sendReportReadyEmail } from '@/lib/email'
 
 /**
  * Generates a research report for a project by running the Report Agent
@@ -35,5 +38,14 @@ export async function generateReport(projectId: string): Promise<{ id: string }>
   }))
 
   const report = await runReportAgent(projectId, extractionSummaries, timelineSummary)
-  return saveReport(report)
+  const saved = await saveReport(report)
+
+  // Fire-and-forget email
+  Promise.all([getProjectOwnerEmail(projectId), getProjectNameById(projectId)])
+    .then(([email, name]) => {
+      if (email && name) sendReportReadyEmail(email, name, projectId)
+    })
+    .catch(() => { /* non-critical */ })
+
+  return saved
 }

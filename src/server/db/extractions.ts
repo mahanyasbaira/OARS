@@ -27,6 +27,16 @@ export async function saveExtraction(payload: ExtractionPayload): Promise<{ id: 
   return data as { id: string }
 }
 
+export async function hasExtractionForSource(sourceId: string): Promise<boolean> {
+  const { count, error } = await adminClient()
+    .from('extractions')
+    .select('id', { count: 'exact', head: true })
+    .eq('source_id', sourceId)
+
+  if (error) return false
+  return (count ?? 0) > 0
+}
+
 export async function getExtractionsByProjectId(projectId: string) {
   const { data, error } = await adminClient()
     .from('extractions')

@@ -1,15 +1,14 @@
 import { getExtractionsByProjectId } from '@/server/db/extractions'
 import { saveTimeline } from '@/server/db/timeline'
 import { runAggregatorAgent } from '@/agents/aggregator-agent'
+import { withRetry } from '@/lib/retry'
 
 /**
  * Runs the Temporal Aggregator for a project after a new extraction lands.
- * Fetches all extractions, runs the agent, and persists the merged timeline.
+ * Fetches all extractions, runs the agent with retry, and persists the merged timeline.
  */
 export async function runTimelineAggregation(projectId: string): Promise<void> {
   const extractions = await getExtractionsByProjectId(projectId)
-
-  // Only aggregate text modality for now (Milestone 3)
   const textExtractions = extractions.filter((e) => e.modality === 'text')
 
   const inputs = textExtractions.map((e) => ({
@@ -22,7 +21,10 @@ export async function runTimelineAggregation(projectId: string): Promise<void> {
     }>) ?? [],
   }))
 
-  const aggregated = await runAggregatorAgent(projectId, inputs)
+  const aggregated = await withRetry(
+    () => runAggregatorAgent(projectId, inputs),
+    { label: `aggregator:${projectId}` }
+  )
   await saveTimeline(aggregated)
 
   console.log(

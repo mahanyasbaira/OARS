@@ -37,19 +37,30 @@ export function ReportView({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">
           {report
             ? `Generated ${new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${report.model}`
             : 'No report generated yet.'}
         </p>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generating ? 'Generating…' : report ? 'Regenerate' : 'Generate Report'}
-        </button>
+        <div className="flex items-center gap-2">
+          {report && (
+            <a
+              href={`/api/projects/${projectId}/report/export`}
+              download
+              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Export Markdown
+            </a>
+          )}
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generating ? 'Generating…' : report ? 'Regenerate' : 'Generate Report'}
+          </button>
+        </div>
       </div>
 
       {error && (

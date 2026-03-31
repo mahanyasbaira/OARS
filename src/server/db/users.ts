@@ -20,6 +20,21 @@ export async function upsertUser(clerkId: string, email: string): Promise<void> 
 }
 
 /**
+ * Returns the email for a project owner, or null if not found.
+ */
+export async function getProjectOwnerEmail(projectId: string): Promise<string | null> {
+  const { data, error } = await adminClient()
+    .from('projects')
+    .select('users(email)')
+    .eq('id', projectId)
+    .single()
+
+  if (error || !data) return null
+  const users = (data as { users: { email: string } | null }).users
+  return users?.email ?? null
+}
+
+/**
  * Returns the internal UUID for a Clerk user, or null if not found.
  */
 export async function getUserIdByClerkId(clerkId: string): Promise<string | null> {
