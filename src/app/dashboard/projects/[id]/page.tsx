@@ -62,6 +62,12 @@ export default async function ProjectPage({
         >
           Report
         </Link>
+        <Link
+          href={`/dashboard/projects/${projectId}/neuro`}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors pb-2"
+        >
+          Neural
+        </Link>
       </div>
 
       <div>

@@ -1,0 +1,14 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+httpx==0.27.2
+python-multipart==0.0.9
+numpy==1.26.4
+
+# TRIBE v2 and its dependencies — install after cloning the source repo:
+#   git clone https://github.com/facebookresearch/tribev2
+#   cd tribev2 && pip install -e ".[plotting]"
+# torch>=2.3.0
+# transformers>=4.40.0
+# nibabel>=5.0.0
+# nilearn>=0.10.0
+# pandas>=2.0.0

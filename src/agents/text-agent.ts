@@ -1,9 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import pdfParse from 'pdf-parse'
+import { openai } from '@/lib/openai'
 import { ExtractionPayloadSchema, type ExtractionPayload } from '@/schemas/extraction'
 
 // Prompt version — increment when prompt behaviour changes and document in changelog
-const PROMPT_VERSION = 'text-agent-v1'
-const MODEL = 'gemini-2.5-flash'
+const PROMPT_VERSION = 'text-agent-v2'
+const MODEL = 'gpt-4o'
 
 const SYSTEM_PROMPT = `You are a precise research extraction agent. Your task is to extract structured information from the provided document text.
 
@@ -30,8 +31,8 @@ Rules:
 
 /**
  * Runs the Text Agent against a document buffer.
- * Sends the file directly to Gemini as inline base64 data — no pdf-parse needed.
- * Uses Gemini 1.5 Flash (free tier: 15 req/min).
+ * PDFs are parsed via pdf-parse; all other text is read as UTF-8.
+ * Uses gpt-4o (OpenAI).
  *
  * Returns a fully validated ExtractionPayload or throws on failure.
  */
@@ -41,29 +42,29 @@ export async function runTextAgent(
   buffer: Buffer,
   mimeType: string
 ): Promise<ExtractionPayload> {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set')
+  // Extract text content from the buffer
+  let textContent: string
+  if (mimeType === 'application/pdf') {
+    const data = await pdfParse(buffer)
+    textContent = data.text
+  } else {
+    textContent = buffer.toString('utf-8')
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-  const model = genAI.getGenerativeModel({
+  const response = await openai.chat.completions.create({
     model: MODEL,
-    systemInstruction: SYSTEM_PROMPT,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Extract structured research data from this document according to the schema in your instructions.\n\nDocument content:\n${textContent}`,
+      },
+    ],
   })
 
-  // Send the file as inline base64 data — Gemini 1.5 Flash natively reads PDFs and plain text
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: buffer.toString('base64'),
-      },
-    },
-    'Extract structured research data from this document according to the schema in your instructions.',
-  ])
-  const raw = result.response.text().trim()
-
-  // Strip markdown code fences if the model wraps the JSON
+  const raw = (response.choices[0].message.content ?? '{}').trim()
+  // Strip markdown code fences if present
   const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   let parsed: unknown

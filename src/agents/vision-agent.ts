@@ -1,10 +1,14 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { spawnSync } from 'child_process'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { openai } from '@/lib/openai'
 import { ExtractionPayloadSchema, type ExtractionPayload } from '@/schemas/extraction'
 
-const PROMPT_VERSION = 'vision-agent-v1'
-const MODEL = 'gemini-2.5-flash'
+const PROMPT_VERSION = 'vision-agent-v2'
+const MODEL = 'gpt-4o'
 
-const SYSTEM_PROMPT = `You are a precise visual research extraction agent. Your task is to extract structured information from the provided image or video file by analysing its visual content — frames, on-screen text, charts, slides, and any visible information.
+const SYSTEM_PROMPT = `You are a precise visual research extraction agent. Your task is to extract structured information from the provided image or video frames by analysing visual content — frames, on-screen text, charts, slides, and any visible information.
 
 You must return ONLY valid JSON matching this exact schema. Do not include markdown, explanation, or any text outside the JSON.
 
@@ -28,9 +32,44 @@ Rules:
 - Express uncertainty in the confidence score rather than inventing details`
 
 /**
+ * Extracts up to 8 evenly-spaced frames from a video buffer using ffmpeg.
+ * Returns an array of base64 JPEG strings.
+ * Returns empty array if ffmpeg is not available on the system.
+ */
+function extractVideoFrames(buffer: Buffer, ext: string): string[] {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oars-frames-'))
+  try {
+    const inputPath = path.join(tmpDir, `input.${ext}`)
+    fs.writeFileSync(inputPath, buffer)
+
+    const outputPattern = path.join(tmpDir, 'frame%03d.jpg')
+    const result = spawnSync(
+      'ffmpeg',
+      ['-i', inputPath, '-vf', 'fps=0.5', '-vframes', '8', '-q:v', '3', outputPattern, '-y'],
+      { timeout: 60_000 }
+    )
+
+    if (result.status !== 0) return []
+
+    return fs
+      .readdirSync(tmpDir)
+      .filter(f => f.startsWith('frame') && f.endsWith('.jpg'))
+      .sort()
+      .slice(0, 8)
+      .map(f => fs.readFileSync(path.join(tmpDir, f)).toString('base64'))
+  } catch {
+    return []
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+/**
  * Runs the Vision Agent against an image or video buffer.
- * Sends the file directly to Gemini as inline base64 data.
- * Gemini 2.5 Flash natively processes image frames and video content.
+ * Images: sent directly as base64 to gpt-4o vision.
+ * Videos: up to 8 frames extracted via ffmpeg, then sent as images.
+ *
+ * Returns a fully validated ExtractionPayload or throws on failure.
  */
 export async function runVisionAgent(
   sourceId: string,
@@ -38,26 +77,49 @@ export async function runVisionAgent(
   buffer: Buffer,
   mimeType: string
 ): Promise<ExtractionPayload> {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set')
+  const isVideo = mimeType.startsWith('video/')
+  const ext = mimeType.split('/')[1] ?? (isVideo ? 'mp4' : 'jpg')
+
+  // Build image content parts
+  type ImagePart = { type: 'image_url'; image_url: { url: string; detail: 'high' } }
+  const imageParts: ImagePart[] = []
+
+  if (isVideo) {
+    const frames = extractVideoFrames(buffer, ext)
+    for (const frame of frames) {
+      imageParts.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${frame}`, detail: 'high' },
+      })
+    }
+  } else {
+    imageParts.push({
+      type: 'image_url',
+      image_url: { url: `data:${mimeType};base64,${buffer.toString('base64')}`, detail: 'high' },
+    })
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-  const model = genAI.getGenerativeModel({
+  const userContent: Array<{ type: 'text'; text: string } | ImagePart> = [
+    {
+      type: 'text',
+      text:
+        imageParts.length > 0
+          ? 'Extract structured research data from the visual content in this file according to the schema in your instructions.'
+          : 'No visual frames could be extracted from this video file. Return an empty extraction with confidence 0.',
+    },
+    ...imageParts,
+  ]
+
+  const response = await openai.chat.completions.create({
     model: MODEL,
-    systemInstruction: SYSTEM_PROMPT,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userContent },
+    ],
   })
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: buffer.toString('base64'),
-      },
-    },
-    'Extract structured research data from the visual content in this file according to the schema in your instructions.',
-  ])
-  const raw = result.response.text().trim()
+  const raw = (response.choices[0].message.content ?? '{}').trim()
   const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   let parsed: unknown

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // R2 is S3-compatible — uses the AWS SDK pointed at Cloudflare's endpoint
@@ -25,6 +25,15 @@ export async function getPresignedUploadUrl(key: string, mimeType: string): Prom
     ContentType: mimeType,
   })
   return getSignedUrl(r2Client, command, { expiresIn: 300 })
+}
+
+/**
+ * Generates a presigned URL that allows downloading an object from R2.
+ * Expires in 1 hour.
+ */
+export async function getSignedDownloadUrl(key: string): Promise<string> {
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+  return getSignedUrl(r2Client, command, { expiresIn: 3600 })
 }
 
 /**

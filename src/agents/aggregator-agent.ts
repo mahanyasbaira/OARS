@@ -1,8 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { openai } from '@/lib/openai'
 import { AggregatorPayloadSchema, type AggregatorPayload } from '@/schemas/timeline'
 
-const PROMPT_VERSION = 'aggregator-agent-v1'
-const MODEL = 'gemini-2.5-flash'
+const PROMPT_VERSION = 'aggregator-agent-v2'
+const MODEL = 'gpt-4o'
 
 const SYSTEM_PROMPT = `You are a temporal aggregation agent. You receive a list of structured extractions from multiple documents and must produce a unified, chronological timeline.
 
@@ -56,10 +56,6 @@ export async function runAggregatorAgent(
   projectId: string,
   extractions: ExtractionInput[]
 ): Promise<AggregatorPayload> {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set')
-  }
-
   if (extractions.length === 0) {
     return {
       projectId,
@@ -71,17 +67,20 @@ export async function runAggregatorAgent(
     }
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-  const model = genAI.getGenerativeModel({
+  const input = JSON.stringify(extractions, null, 2)
+  const response = await openai.chat.completions.create({
     model: MODEL,
-    systemInstruction: SYSTEM_PROMPT,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Aggregate the following extractions into a unified timeline:\n\n${input}`,
+      },
+    ],
   })
 
-  const input = JSON.stringify(extractions, null, 2)
-  const result = await model.generateContent(
-    `Aggregate the following extractions into a unified timeline:\n\n${input}`
-  )
-  const raw = result.response.text().trim()
+  const raw = (response.choices[0].message.content ?? '{}').trim()
   const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
 
   let parsed: unknown

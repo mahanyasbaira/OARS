@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { SourceModality, SourceStatus } from '@/lib/supabase/types'
 
 type Source = {
@@ -38,6 +39,8 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+type AnalyzeState = 'idle' | 'submitting' | 'submitted' | 'error'
+
 function SourceRow({
   source,
   projectId,
@@ -47,6 +50,8 @@ function SourceRow({
 }) {
   const [status, setStatus] = useState<SourceStatus>(source.status)
   const [confidence, setConfidence] = useState<number | null>(null)
+  const [extractionId, setExtractionId] = useState<string | null>(null)
+  const [analyzeState, setAnalyzeState] = useState<AnalyzeState>('idle')
 
   // Poll status every 3s while processing
   const poll = useCallback(async () => {
@@ -54,17 +59,44 @@ function SourceRow({
     if (!res.ok) return
     const data = await res.json() as {
       source: { status: SourceStatus }
-      extraction: { confidence: number } | null
+      extraction: { id: string; confidence: number } | null
     }
     setStatus(data.source.status)
-    if (data.extraction) setConfidence(data.extraction.confidence)
+    if (data.extraction) {
+      setConfidence(data.extraction.confidence)
+      setExtractionId(data.extraction.id)
+    }
   }, [projectId, source.id])
+
+  useEffect(() => {
+    // Fetch once on mount to get extraction_id for ready sources
+    poll()
+  }, [poll])
 
   useEffect(() => {
     if (status !== 'processing' && status !== 'pending') return
     const interval = setInterval(poll, 3000)
     return () => clearInterval(interval)
   }, [status, poll])
+
+  const handleAnalyze = useCallback(async () => {
+    if (!extractionId) return
+    setAnalyzeState('submitting')
+    try {
+      const res = await fetch(`/api/projects/${projectId}/neuro/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_id: source.id, extraction_id: extractionId }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { error?: string }
+        throw new Error(err.error ?? `HTTP ${res.status}`)
+      }
+      setAnalyzeState('submitted')
+    } catch {
+      setAnalyzeState('error')
+    }
+  }, [extractionId, projectId, source.id])
 
   const upload = source.uploads?.[0]
 
@@ -93,6 +125,32 @@ function SourceRow({
           )}
           {status}
         </Badge>
+        {status === 'ready' && extractionId && analyzeState === 'idle' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-7 px-2"
+            onClick={handleAnalyze}
+          >
+            Analyze
+          </Button>
+        )}
+        {analyzeState === 'submitting' && (
+          <span className="text-xs text-muted-foreground">Queuing…</span>
+        )}
+        {analyzeState === 'submitted' && (
+          <span className="text-xs text-green-600 dark:text-green-400">Queued</span>
+        )}
+        {analyzeState === 'error' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-7 px-2 text-destructive"
+            onClick={handleAnalyze}
+          >
+            Retry
+          </Button>
+        )}
       </div>
     </div>
   )
